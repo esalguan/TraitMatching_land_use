@@ -1,0 +1,579 @@
+## LOAD LIBRARIES
+
+library(dplyr)
+library(data.table)
+library(sjPlot)
+library(sjlabelled)
+library(sjmisc)
+library(ggplot2)
+library(patchwork)
+library(MuMIn)
+library(performance)
+library(DHARMa)
+
+#options(na.action = "na.fail")
+
+# Set working directory and load interaction data with trait matching
+setwd("C:/Users/esalg/Documents/TraitMatching/TraitMatching")
+
+
+# Load data without 0s inputs
+int_TM0 <- fread("interaction_data_day_Rates.txt", header=T, stringsAsFactors = FALSE)
+
+# Correct names
+
+#int_TM0 <- int_TM0 %>% mutate(final_plant_name=recode(final_plant_name, `Bomalera lutea`="Bomarea lutea", `Reneleamia sp2`="Renealmia sp2", `Nassa grandiflora`="Nasa grandiflora"))
+
+# Correct site column name
+names(int_TM0)[3]="site"
+# Filter out non paired forest sites
+int_TM <- int_TM0[-which(int_TM0$site %in% c("Yanacocha", "SantaLuciaUpper", "SantaLuciaLower", "Mashpi_Capuchin")),]
+
+# Add habitat variable with two levels (forest and deforested) to the 
+# corresponding transect ID
+
+int_TM <- int_TM %>% 
+  mutate(habitat = case_when(
+    endsWith(site, "pungo") ~ "forest",
+    endsWith(site, "decocha") ~ "forest",
+    endsWith(site, "ucuna") ~ "forest",
+    endsWith(site, "larias") ~ "forest",
+    endsWith(site, "Choco") ~ "forest",
+    endsWith(site, "tamia") ~ "forest",
+    endsWith(site, "aguna") ~ "forest",
+    endsWith(site, "urbed") ~ "deforested",
+    endsWith(site, "cunapi") ~ "deforested",
+    endsWith(site, "agusa") ~ "deforested",
+    endsWith(site, "sitana") ~ "deforested"
+  ))
+
+# Add block ID variable with 7 levels, grouping pairs 
+# of forest and deforested transects
+
+int_TM <- int_TM %>% 
+  mutate(block = case_when(
+    endsWith(site, "decocha") ~ "Block7",
+    endsWith(site, "nacocha_disturbed") ~ "Block7",
+    endsWith(site, "pungo") ~ "Block6",
+    endsWith(site, "pungo_disturbed") ~ "Block6",
+    endsWith(site, "alarias") ~ "Block5",
+    endsWith(site, "unapi") ~ "Block5",
+    endsWith(site, "tamia") ~ "Block4",
+    endsWith(site, "tamia_disturbed") ~ "Block4",
+    endsWith(site, "pucuna") ~ "Block3",
+    endsWith(site, "misitana") ~ "Block3",
+    endsWith(site, "Laguna") ~ "Block2",
+    endsWith(site, "agusa") ~ "Block2",
+    endsWith(site, "Choco") ~ "Block1",
+    endsWith(site, "Choco_disturbed") ~ "Block1",
+  ))
+
+# Add mean block-elevation variable with 7 levels 
+
+int_TM <- int_TM %>% 
+  mutate(elevation = case_when(
+    endsWith(site, "decocha") ~ "3300",
+    endsWith(site, "nacocha_disturbed") ~ "3300",
+    endsWith(site, "pungo") ~ "2900",
+    endsWith(site, "pungo_disturbed") ~ "2900",
+    endsWith(site, "cunapi") ~ "1900",
+    endsWith(site, "larias") ~ "1900",
+    endsWith(site, "tamia") ~ "1700",
+    endsWith(site, "tamia_disturbed") ~ "1700",
+    endsWith(site, "pucuna") ~ "1500",
+    endsWith(site, "misitana") ~ "1500",
+    endsWith(site, "Laguna") ~ "1075",
+    endsWith(site, "gusa") ~ "1075",
+    endsWith(site, "Choco") ~ "1100",
+    endsWith(site, "Choco_disturbed") ~ "1100",
+  ))
+
+int_TM$elevation <- as.factor(int_TM$elevation)
+
+# Create TM (trait/matching) and TB (trait barriers) variables
+# with absolute values
+
+int_TM$trait_diff <- int_TM$meanTube-int_TM$meanExpC # extract trait difference
+int_TM$trait_match <- abs(int_TM$trait_diff) # aboslute value of trait difference
+#int_TM$trait_match_scale <- scale(int_TM$trait_match)
+
+int_TM$trbvec=0 # trait barrier variable indicating if an interaction is sorted as trait barrier
+int_TM$trbvec[int_TM$trait_diff<0]=1 # when trait barrier equal to one that means that corolla is longer than the bill (Santamaria & Rodriguez-Girones 2007)
+int_TM$trmvec=0 # trait matching vector indicating if an interaction is sorted as trait matching
+int_TM$trmvec[int_TM$trait_diff>0]=1 # when trait matching equal to one that means that corolla is shorter than the bill
+
+# Sort trait difference values as either trait matching or trait barrier 
+# These are the variables to use as predictors of niche-based process
+
+int_TM$trait_MATCH1 <- -1*(abs(int_TM$trmvec*int_TM$trait_diff))
+int_TM$trait_MISM1 <- abs(int_TM$trbvec*int_TM$trait_diff)
+
+## Prepare variables for modelling 
+int_TM$Y=as.numeric(int_TM$Y)
+int_TM$hummingbird2=as.numeric(as.factor(int_TM$hummingbird_species)) # hummingbirds id as a factor 
+int_TM$plant2=as.numeric(as.factor(int_TM$plant_species)) # plants id as a factor
+int_TM$site2=as.numeric(as.factor(int_TM$site)) # site id as a factor
+int_TM$block2=as.numeric(as.factor(int_TM$block)) # block id as a factor
+int_TM$habitat <- factor(int_TM$habitat, levels =(c("forest", "deforested"))) # habitat as factor 1 = forest, 2 = deforested
+
+#Explore density distribution of variables of interest 
+plot(density(int_TM$trait_MISM1, na.rm = TRUE))
+plot(density(int_TM$trait_MATCH1, na.rm = TRUE))
+plot(density(int_TM$trait_match, na.rm = TRUE))
+#plot(density(int_TM$trait_match_scale, na.rm = TRUE))
+plot(density(int_TM$Rate, na.rm = TRUE))  
+
+# Create Month and Year columns
+
+int_TM$Month <- format(as.Date(int_TM$date, format="%Y/%m/%d"),"%m")
+int_TM$Year <- format(as.Date(int_TM$date, format="%Y/%m/%d"),"%Y")
+
+##### Plot patterns ####
+
+# First we explore how traits distribution change between habitats, with density plots of corolla and bill length.   
+
+# int_TM2 <- int_TM[!(int_TM$Y=="0"),] # remove inputed 0´s to avoid influence of inputed data
+# on trait distribution
+
+# Corolla length
+tv <- ggplot(int_TM, aes(x=log(meanTube), y=log(meanTube))) + 
+  geom_density_2d_filled(alpha=0.7) +
+  facet_wrap(~habitat) + theme_bw() +
+  theme(legend.position = "none")
+tv
+
+# Bill length
+bv <- ggplot(int_TM, aes(x=log(meanExpC), y=log(meanExpC))) + 
+  geom_density_2d_filled(alpha=0.7) +
+  facet_wrap(~habitat) + theme_bw() #+
+  theme(legend.position = "none")
+
+bv
+
+# Trait matching
+tmv <- ggplot(int_TM, aes(x=trait_MATCH1, y=trait_MATCH1)) + 
+  geom_density_2d_filled(alpha=0.7) +
+  facet_wrap(~habitat) + theme_bw() +
+  theme(legend.position = "none")
+# Trait Barrier
+tmiv <- ggplot(int_TM, aes(x=log(trait_MISM1), y=log(trait_MISM1))) + 
+  geom_density_2d_filled(alpha=0.7) +
+  facet_wrap(~habitat) + theme_bw() #+
+#theme(legend.position = "none")
+
+tv / bv 
+
+tmv / tmiv 
+
+# Violin plots (another option to visualize trait density distribution)
+# this time, we subset by blocks spread along elevation
+
+# Corolla length
+pvio <- ggplot(int_TM, aes(x=habitat, y=log(meanTube), fill=habitat)) +
+  geom_violin(alpha=.3) +
+  xlab(" ") + ylab(" Corolla length (cm)") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_boxplot(alpha=.3, width=.1) + geom_rug () + facet_wrap(~block)
+
+pvio
+
+##### Hummingbirds bill length
+
+hvio <- ggplot(int_TM, aes(x=habitat, y=log(meanExpC), fill=habitat)) +
+  geom_violin(alpha=.3) +
+  xlab(" ") + ylab(" Bill length (cm)") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_boxplot(alpha=.3, width=.1) + geom_rug () + facet_wrap(~block)
+
+hvio
+## Trait match
+tmvio <- ggplot(int_TM, aes(x=habitat, y=log(trait_MATCH1), fill=habitat)) +
+  geom_violin(alpha=.3) +
+  xlab(" ") + ylab(" Trait match (cm)") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_boxplot(alpha=.3, width=.09) + geom_rug () 
+
+tmvio
+
+# Trait mismatch
+tmivio <- ggplot(int_TM, aes(x=habitat, y=log(trait_MISM1), fill=habitat)) +
+  geom_violin(alpha=.3) +
+  xlab(" ") + ylab(" Trait barrier (cm)") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_boxplot(alpha=.3, width=.1) + geom_rug () 
+
+tmivio
+
+
+pvio + hvio
+tmvio + tmivio
+
+# Changes around the mean does not seem evident for traits, 
+# but changes in the upper and lower tails of the distribution 
+# become aparent. We statistically test changes accross the 
+# distribution using quantile regressions
+
+## Quantile regressions analysis 
+library(quantreg)
+library(caret)
+
+Quan_fit_Tube <- rq(meanTube ~ habitat*elevation, data = int_TM, tau = seq(0, 1, by = 0.25))
+sumTube=summary(Quan_fit_Tube, se="boot")
+plot(sumTube)
+
+Quan_fit_Culmen <- rq(meanExpC ~ habitat*elevation, data = int_TM, tau = seq(0, 1, by = 0.25))
+sumCul=summary(Quan_fit_Culmen, se="boot")
+plot(sumCul)
+
+# Conclusion: differences in trait distribution are significant at the 
+# lower and upper (bills) tails. Now we investigate if these differences affect
+# linkage rules (neutral, niche-based [trait matching and barrier])
+
+# Remove outlier
+#int_TM3 <- int_TM[-3300,]
+#hist(int_TM3$trait_diff)
+
+
+# We model interaction strength (number of visits per day),
+# as a function of habitat, trait matching, trait barrier
+library(glmmTMB)
+library(ggeffects)
+library(jtools)
+
+
+# Model daily visit rates of hummingbird to plants, as a function
+# of trait matching and trait barrier (niche-based) and 
+# habitat intercept as a proxy of neutral process. We also model 
+# the effect of elevation to absorb elevation/related variation, but 
+# we focus on habitat effects.
+
+formula <- Rate ~ trait_match*habitat + trait_match*elevation +
+  #trait_MISM1*habitat + trait_MISM1*elevation +
+  (1|hummingbird2) + (1|plant2) 
+
+a=glmmTMB(formula, family=gaussian, data=int_TM) # model without inputed 0s
+
+summary(a)
+
+# Model evaluation
+
+simulationOutput <- simulateResiduals(fittedModel = a, plot = T)
+
+# QQ plots and residuals vs predicted does not look great,
+# now we try with daily visit counts and poisson distribution
+
+formula_b <- Y ~ trait_match*habitat + trait_match*elevation +
+  #trait_MISM1*habitat + trait_MISM1*elevation +
+  (1|hummingbird2) + (1|plant2)
+
+b=glmmTMB(formula_b, family=nbinom2, data=int_TM) 
+summary(b)
+
+# Model evaluation
+simulationOutput <- simulateResiduals(fittedModel = b, plot = T)
+
+
+# Slight improvement on qq plots but residuals vs predicted does not look good,
+# over dispersion we re-estimate coefficients by multiplying the standard error 
+# by the square root of the dispersion factor 2 and 
+# recomputing the Z- and p-values accordingly, following Bolker (2023)
+# https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#overdispersion)
+
+overdisp_fun <- function(model) {
+  rdf <- df.residual(model)
+  rp <- residuals(model,type="pearson")
+  Pearson.chisq <- sum(rp^2)
+  prat <- Pearson.chisq/rdf
+  pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+  c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+
+quasi_table <- function(model,ctab=coef(summary(model)),
+                        phi=overdisp_fun(model)["ratio"]) {
+  qctab <- within(as.data.frame(ctab),
+                  {   `Std. Error` <- `Std. Error`*sqrt(phi)
+                  `z value` <- Estimate/`Std. Error`
+                  `Pr(>|z|)` <- 2*pnorm(abs(`z value`), lower.tail=FALSE)
+                  })
+  return(qctab)
+}
+
+printCoefmat(quasi_table(b,
+                         ctab=coef(summary(b))[["cond"]]),
+             digits=3)
+
+
+##  Now we try with the zero inputed data, model with poisson distribution and
+##  model with binomial response and probit link function
+
+int_TM0 <- fread("interaction_data_day_0s.txt", header=T, stringsAsFactors = FALSE)
+
+# Correct names
+
+#int_TM0 <- int_TM0 %>% mutate(final_plant_name=recode(final_plant_name, `Bomalera lutea`="Bomarea lutea", `Reneleamia sp2`="Renealmia sp2", `Nassa grandiflora`="Nasa grandiflora"))
+
+names(int_TM0)[1]="site"
+
+# Filter non paired forest sites
+
+int_TM <- int_TM0[-which(int_TM0$site %in% c("Yanacocha", "SantaLuciaUpper", "SantaLuciaLower", "Mashpi_Capuchin")),]
+
+
+
+# Add habitat variable with two levels (forest and deforested)
+
+int_TM <- int_TM %>% 
+  mutate(habitat = case_when(
+    endsWith(site, "pungo") ~ "forest",
+    endsWith(site, "decocha") ~ "forest",
+    endsWith(site, "ucuna") ~ "forest",
+    endsWith(site, "larias") ~ "forest",
+    endsWith(site, "Choco") ~ "forest",
+    endsWith(site, "tamia") ~ "forest",
+    endsWith(site, "aguna") ~ "forest",
+    endsWith(site, "urbed") ~ "deforested",
+    endsWith(site, "cunapi") ~ "deforested",
+    endsWith(site, "agusa") ~ "deforested",
+    endsWith(site, "sitana") ~ "deforested"
+  ))
+
+# Add block ID variable with 7 levels 
+
+int_TM <- int_TM %>% 
+  mutate(block = case_when(
+    endsWith(site, "decocha") ~ "Block7",
+    endsWith(site, "nacocha_disturbed") ~ "Block7",
+    endsWith(site, "pungo") ~ "Block6",
+    endsWith(site, "pungo_disturbed") ~ "Block6",
+    endsWith(site, "alarias") ~ "Block5",
+    endsWith(site, "unapi") ~ "Block5",
+    endsWith(site, "tamia") ~ "Block4",
+    endsWith(site, "tamia_disturbed") ~ "Block4",
+    endsWith(site, "pucuna") ~ "Block3",
+    endsWith(site, "misitana") ~ "Block3",
+    endsWith(site, "Laguna") ~ "Block2",
+    endsWith(site, "agusa") ~ "Block2",
+    endsWith(site, "Choco") ~ "Block1",
+    endsWith(site, "Choco_disturbed") ~ "Block1",
+  ))
+
+# Add mean block-elevation variable with 7 levels 
+
+int_TM <- int_TM %>% 
+  mutate(elevation = case_when(
+    endsWith(site, "decocha") ~ "3300",
+    endsWith(site, "nacocha_disturbed") ~ "3300",
+    endsWith(site, "pungo") ~ "2900",
+    endsWith(site, "pungo_disturbed") ~ "2900",
+    endsWith(site, "cunapi") ~ "1900",
+    endsWith(site, "larias") ~ "1900",
+    endsWith(site, "tamia") ~ "1700",
+    endsWith(site, "tamia_disturbed") ~ "1700",
+    endsWith(site, "pucuna") ~ "1500",
+    endsWith(site, "misitana") ~ "1500",
+    endsWith(site, "Laguna") ~ "1075",
+    endsWith(site, "gusa") ~ "1075",
+    endsWith(site, "Choco") ~ "1100",
+    endsWith(site, "Choco_disturbed") ~ "1100",
+  ))
+
+int_TM$elevation <- as.factor(int_TM$elevation)
+
+# Create TM and TB variables with absolute value of trait matching and trait barrier
+
+int_TM$trait_diff <- int_TM$meanTube-int_TM$meanExpC # extract trait difference
+int_TM$trait_match <- abs(int_TM$trait_diff)
+int_TM$trait_match_scale <- scale(int_TM$trait_match)
+
+int_TM$trbvec=0 # trait barrier variable indicating if an interaction is sorted as trait barrier
+int_TM$trbvec[int_TM$trait_diff<0]=1 # when trait barrier equal to one that means that corolla is longer than the bill (Santamaria Rodriguez-Girones 2007)
+int_TM$trmvec=0 # trait matching vector indicating if an interaction is sorted as trait matching
+int_TM$trmvec[int_TM$trait_diff>0]=1 # when trait matching equal to one that means that corolla is shorter than the bill
+
+# binary variable of interaction
+int_TM$Ybin=0 
+int_TM$Ybin[int_TM$Y>0]=1
+
+# Sort trait difference values as either trait matching or trait barrier 
+# These are the variables to use as predictors of niche-based process
+int_TM$trait_MATCH1 <- (abs(int_TM$trmvec*int_TM$trait_diff))
+int_TM$trait_MISM1 <- abs(int_TM$trbvec*int_TM$trait_diff)
+
+## Prepare variables for modelling 
+
+int_TM$hummingbird2=as.numeric(as.factor(int_TM$hummingbird_species)) # hummingbirds id as a factor
+int_TM$plant2=as.numeric(as.factor(int_TM$plant_species)) # plants id as a factor
+int_TM$site2=as.numeric(as.factor(int_TM$site))
+int_TM$block2=as.numeric(as.factor(int_TM$block))
+int_TM$habitat <- factor(int_TM$habitat, levels =(c("forest", "deforested"))) 
+
+### Models. Start wit binomial and probit link
+
+formula_b <- Ybin ~ trait_MATCH1*habitat + trait_MATCH1*elevation + 
+                    trait_MISM1*habitat + trait_MISM1*elevation +
+                    (1|hummingbird2) + (1|plant2)  
+
+c=glmmTMB(formula_b, family=binomial(link="logit"),
+          control=glmmTMBControl(parallel = 3),
+          ziformula=~1, data=int_TM)
+
+summary(c) # returning error message, needs debuging
+SimulationOutput <- simulateResiduals(fittedModel = c, plot = T)
+
+#Model with poisson error link
+int_TM$Y=as.numeric(int_TM$Y)
+formula_p <- Y ~  trait_MATCH1*habitat + trait_MATCH1*elevation + 
+  trait_MISM1*habitat + trait_MISM1*elevation +
+  (1|hummingbird2) + (1|plant2) # + I(habitat2) 
+
+
+d=glmmTMB(formula_p, family=poisson, control=glmmTMBControl(parallel = 3), ziformula=~1,data=int_TM)
+summary(d) # 
+
+#Model checking
+SimulationOutput <- simulateResiduals(fittedModel = d, plot = T) # Residuals vs fitted seem ok 
+check_zeroinflation(d) # no indication of zero inflation
+check_overdispersion(d) # despite the warnings, model looks ok
+
+compare_performance(c, d, rank=TRUE, verbose = FALSE)
+
+# Conclusion : model c, qq plot, and residual plots look ok, plus lower AIC values
+
+
+## Plotting results
+p1=plot(ggpredict(c, terms = c("trait_MATCH1 [all]", "habitat"))) + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) +
+  labs(x = "Trait matching", y = "Interaction probability") + 
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + 
+  geom_rug()
+
+p2=plot(ggpredict(c, terms = c("trait_MISM1 [all]", "habitat"))) + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) +
+  labs(x = "Trait barrier", y = " ") + 
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + 
+  geom_rug()
+
+
+p3=plot(ggpredict(c, terms = "habitat")) + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) +
+  labs(x = "Habitat intercept", y = " ") + 
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365"))  
+
+p3 + p1 + p2
+
+
+jtools::plot_summs(c, scale = TRUE)
+est <- jtools::plot_summs(d,
+                          coefs = c("Intercept" = "sd__(Intercept)",
+                                    "Habitat" = "habitatdeforested",
+                                    "Trait matching" = "trait_MATCH1", "Trait barrier" = "trait_MISM1",
+                                    "Habitat x Trait matching" = "trait_MATCH1:habitatdeforested",
+                                    "Habitat x Trait barrier" = "habitatdeforested:trait_MISM1"
+                          ),
+                          scale = TRUE, robust = TRUE, r.squared=FALSE)
+
+apatheme=theme_bw()+
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line(),
+        text=element_text(family='Helvetica'),
+        legend.title=element_blank(), 
+        axis.text=element_text(size=14),
+        axis.title=element_text(size=14),
+        legend.text = element_text(size = 14))
+
+p4= est + apatheme
+
+p4 + (p3/p2/p1)
+
