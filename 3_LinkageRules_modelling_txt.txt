@@ -1,3 +1,7 @@
+# Free memory space
+rm(list = ls())
+.rs.restartR()
+
 ## LOAD LIBRARIES
 
 library(dplyr)
@@ -11,23 +15,28 @@ library(MuMIn)
 library(performance)
 library(DHARMa)
 
-#options(na.action = "na.fail")
+#options(digits = 3)
 
 # Set working directory and load interaction data with trait matching
-setwd("C:/Users/esalg/Documents/TraitMatching/TraitMatching")
+setwd(dir="C:/Users/guevara/Dropbox/PC/Documents/TraitMatching")
 
+
+### REMEMBER for the quantile regression analyses use the non 0 data interaction_data_day_Rates.txt
 
 # Load data without 0s inputs
-int_TM0 <- fread("interaction_data_day_Rates.txt", header=T, stringsAsFactors = FALSE)
-
-# Correct names
-
-#int_TM0 <- int_TM0 %>% mutate(final_plant_name=recode(final_plant_name, `Bomalera lutea`="Bomarea lutea", `Reneleamia sp2`="Renealmia sp2", `Nassa grandiflora`="Nasa grandiflora"))
+int_TM0 <- fread("interaction_data_day_0s_durationsampling_piercing.txt", header=T, stringsAsFactors = FALSE)
 
 # Correct site column name
 names(int_TM0)[3]="site"
 # Filter out non paired forest sites
 int_TM <- int_TM0[-which(int_TM0$site %in% c("Yanacocha", "SantaLuciaUpper", "SantaLuciaLower", "Mashpi_Capuchin")),]
+
+#Select columns to use 
+
+int_TM <- int_TM[,c(1,2,3,4,7,8,9)]
+
+# Delete incomplete rows
+int_TM <- int_TM[complete.cases(int_TM), ]
 
 # Add habitat variable with two levels (forest and deforested) to the 
 # corresponding transect ID
@@ -68,110 +77,57 @@ int_TM <- int_TM %>%
     endsWith(site, "Choco_disturbed") ~ "Block1",
   ))
 
-# Add mean block-elevation variable with 7 levels 
-
-int_TM <- int_TM %>% 
-  mutate(elevation = case_when(
-    endsWith(site, "decocha") ~ "3300",
-    endsWith(site, "nacocha_disturbed") ~ "3300",
-    endsWith(site, "pungo") ~ "2900",
-    endsWith(site, "pungo_disturbed") ~ "2900",
-    endsWith(site, "cunapi") ~ "1900",
-    endsWith(site, "larias") ~ "1900",
-    endsWith(site, "tamia") ~ "1700",
-    endsWith(site, "tamia_disturbed") ~ "1700",
-    endsWith(site, "pucuna") ~ "1500",
-    endsWith(site, "misitana") ~ "1500",
-    endsWith(site, "Laguna") ~ "1075",
-    endsWith(site, "gusa") ~ "1075",
-    endsWith(site, "Choco") ~ "1100",
-    endsWith(site, "Choco_disturbed") ~ "1100",
-  ))
-
-int_TM$elevation <- as.factor(int_TM$elevation)
-
-# Create TM (trait/matching) and TB (trait barriers) variables
+# Create TM (trait-matching) and TB (trait barriers) variables
 # with absolute values
 
-int_TM$trait_diff <- int_TM$meanTube-int_TM$meanExpC # extract trait difference
-int_TM$trait_match <- abs(int_TM$trait_diff) # aboslute value of trait difference
-#int_TM$trait_match_scale <- scale(int_TM$trait_match)
+int_TM$trait_mismatch1 <- (int_TM$meanTube-int_TM$meanExpC)
+int_TM$trait_mismatch <- abs(int_TM$meanTube-int_TM$meanExpC)  # remember it is a measure of mismatch, not match
+int_TM$trait_match <- -1*int_TM$trait_mismatch
 
-int_TM$trbvec=0 # trait barrier variable indicating if an interaction is sorted as trait barrier
-int_TM$trbvec[int_TM$trait_diff<0]=1 # when trait barrier equal to one that means that corolla is longer than the bill (Santamaria & Rodriguez-Girones 2007)
-int_TM$trmvec=0 # trait matching vector indicating if an interaction is sorted as trait matching
-int_TM$trmvec[int_TM$trait_diff>0]=1 # when trait matching equal to one that means that corolla is shorter than the bill
+# Relative degree of trait matching as compared to hummingbirds bill length
 
-# Sort trait difference values as either trait matching or trait barrier 
-# These are the variables to use as predictors of niche-based process
+# int_TM$relative_traitmatch= int_TM$trait_match/int_TM$meanExpC
 
-int_TM$trait_MATCH1 <- -1*(abs(int_TM$trmvec*int_TM$trait_diff))
-int_TM$trait_MISM1 <- abs(int_TM$trbvec*int_TM$trait_diff)
+int_TM$barrier=0 # trait barrier variable indicating if an interaction is sorted as trait barrier
+
+int_TM$barrier[int_TM$meanTube>int_TM$meanExpC]=1 # when trait barrier equal to one that means that corolla is longer than the bill
 
 ## Prepare variables for modelling 
 int_TM$Y=as.numeric(int_TM$Y)
+#int_TM$Rate=as.numeric(int_TM$Rate)
 int_TM$hummingbird2=as.numeric(as.factor(int_TM$hummingbird_species)) # hummingbirds id as a factor 
 int_TM$plant2=as.numeric(as.factor(int_TM$plant_species)) # plants id as a factor
 int_TM$site2=as.numeric(as.factor(int_TM$site)) # site id as a factor
 int_TM$block2=as.numeric(as.factor(int_TM$block)) # block id as a factor
 int_TM$habitat <- factor(int_TM$habitat, levels =(c("forest", "deforested"))) # habitat as factor 1 = forest, 2 = deforested
 
+
 #Explore density distribution of variables of interest 
-plot(density(int_TM$trait_MISM1, na.rm = TRUE))
-plot(density(int_TM$trait_MATCH1, na.rm = TRUE))
+plot(density(int_TM$trait_mismatch, na.rm = TRUE))
+plot(density(int_TM$barrier, na.rm = TRUE))
 plot(density(int_TM$trait_match, na.rm = TRUE))
-#plot(density(int_TM$trait_match_scale, na.rm = TRUE))
-plot(density(int_TM$Rate, na.rm = TRUE))  
+plot(density(int_TM$Y, na.rm = TRUE))  
 
-# Create Month and Year columns
-
-int_TM$Month <- format(as.Date(int_TM$date, format="%Y/%m/%d"),"%m")
-int_TM$Year <- format(as.Date(int_TM$date, format="%Y/%m/%d"),"%Y")
 
 ##### Plot patterns ####
 
-# First we explore how traits distribution change between habitats, with density plots of corolla and bill length.   
+# First we explore how traits distribution change between habitats,
+# with density plots of corolla and bill length. We look at how frequent 
+# are different corollas and bill lengths in the interaction dataset
 
-# int_TM2 <- int_TM[!(int_TM$Y=="0"),] # remove inputed 0´s to avoid influence of inputed data
+# First, remove imputed 0?s to avoid influence of imputed data
 # on trait distribution
 
-# Corolla length
-tv <- ggplot(int_TM, aes(x=log(meanTube), y=log(meanTube))) + 
-  geom_density_2d_filled(alpha=0.7) +
-  facet_wrap(~habitat) + theme_bw() +
-  theme(legend.position = "none")
-tv
+int_TM2 <- int_TM[!(int_TM$Y=="0"),] 
 
-# Bill length
-bv <- ggplot(int_TM, aes(x=log(meanExpC), y=log(meanExpC))) + 
-  geom_density_2d_filled(alpha=0.7) +
-  facet_wrap(~habitat) + theme_bw() #+
-  theme(legend.position = "none")
 
-bv
+# Violin plots 
 
-# Trait matching
-tmv <- ggplot(int_TM, aes(x=trait_MATCH1, y=trait_MATCH1)) + 
-  geom_density_2d_filled(alpha=0.7) +
-  facet_wrap(~habitat) + theme_bw() +
-  theme(legend.position = "none")
-# Trait Barrier
-tmiv <- ggplot(int_TM, aes(x=log(trait_MISM1), y=log(trait_MISM1))) + 
-  geom_density_2d_filled(alpha=0.7) +
-  facet_wrap(~habitat) + theme_bw() #+
-#theme(legend.position = "none")
-
-tv / bv 
-
-tmv / tmiv 
-
-# Violin plots (another option to visualize trait density distribution)
-# this time, we subset by blocks spread along elevation
 
 # Corolla length
-pvio <- ggplot(int_TM, aes(x=habitat, y=log(meanTube), fill=habitat)) +
-  geom_violin(alpha=.3) +
-  xlab(" ") + ylab(" Corolla length (cm)") +
+pvio <- ggplot(int_TM2, aes(x=habitat, y=meanTube, fill=habitat)) +
+  geom_violin(trim=FALSE, alpha=.3) +
+  xlab(" ") + ylab(" Corolla length (mm)") +
   theme_bw() +
   theme(axis.line = element_line(color='black'),
         plot.background = element_blank(),
@@ -187,15 +143,15 @@ pvio <- ggplot(int_TM, aes(x=habitat, y=log(meanTube), fill=habitat)) +
         plot.title = element_text(hjust = 0.5, size=16)) +
   scale_color_manual(values=c("#31a354", "#d8b365")) + 
   scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
-  geom_boxplot(alpha=.3, width=.1) + geom_rug () + facet_wrap(~block)
+  geom_boxplot(alpha=.3, width=.1) + geom_rug () + ylim(0,250) #+ facet_wrap(~block) 
 
-pvio
+pvio  
 
 ##### Hummingbirds bill length
 
-hvio <- ggplot(int_TM, aes(x=habitat, y=log(meanExpC), fill=habitat)) +
-  geom_violin(alpha=.3) +
-  xlab(" ") + ylab(" Bill length (cm)") +
+hvio <- ggplot(int_TM2, aes(x=habitat, y=meanExpC, fill=habitat)) +
+  geom_violin(trim=FALSE, alpha=.3) +
+  xlab(" ") + ylab(" Bill length (mm)") +
   theme_bw() +
   theme(axis.line = element_line(color='black'),
         plot.background = element_blank(),
@@ -211,13 +167,14 @@ hvio <- ggplot(int_TM, aes(x=habitat, y=log(meanExpC), fill=habitat)) +
         plot.title = element_text(hjust = 0.5, size=16)) +
   scale_color_manual(values=c("#31a354", "#d8b365")) + 
   scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
-  geom_boxplot(alpha=.3, width=.1) + geom_rug () + facet_wrap(~block)
+  geom_boxplot(alpha=.3, width=.1) + geom_rug () #+ facet_wrap(~block) #
 
 hvio
+
 ## Trait match
-tmvio <- ggplot(int_TM, aes(x=habitat, y=log(trait_MATCH1), fill=habitat)) +
+tmvio <- ggplot(int_TM2, aes(x=habitat, y=trait_mismatch1, fill=habitat)) +
   geom_violin(alpha=.3) +
-  xlab(" ") + ylab(" Trait match (cm)") +
+  xlab(" ") + ylab("Corolla - bill length difference (mm)") +
   theme_bw() +
   theme(axis.line = element_line(color='black'),
         plot.background = element_blank(),
@@ -233,36 +190,12 @@ tmvio <- ggplot(int_TM, aes(x=habitat, y=log(trait_MATCH1), fill=habitat)) +
         plot.title = element_text(hjust = 0.5, size=16)) +
   scale_color_manual(values=c("#31a354", "#d8b365")) + 
   scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
-  geom_boxplot(alpha=.3, width=.09) + geom_rug () 
+  geom_boxplot(alpha=.3, width=.09) + geom_rug ()  #facet_wrap(~block) + ylim(0,250)
 
 tmvio
 
-# Trait mismatch
-tmivio <- ggplot(int_TM, aes(x=habitat, y=log(trait_MISM1), fill=habitat)) +
-  geom_violin(alpha=.3) +
-  xlab(" ") + ylab(" Trait barrier (cm)") +
-  theme_bw() +
-  theme(axis.line = element_line(color='black'),
-        plot.background = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_blank(),
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text=element_text(size=16),
-        axis.title=element_text(size=14,face="bold"),
-        strip.text = element_text(size=16),
-        legend.title = element_text(size = 16), 
-        plot.title = element_text(hjust = 0.5, size=16)) +
-  scale_color_manual(values=c("#31a354", "#d8b365")) + 
-  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
-  geom_boxplot(alpha=.3, width=.1) + geom_rug () 
+pvio + hvio + tmvio
 
-tmivio
-
-
-pvio + hvio
-tmvio + tmivio
 
 # Changes around the mean does not seem evident for traits, 
 # but changes in the upper and lower tails of the distribution 
@@ -273,25 +206,310 @@ tmvio + tmivio
 library(quantreg)
 library(caret)
 
-Quan_fit_Tube <- rq(meanTube ~ habitat*elevation, data = int_TM, tau = seq(0, 1, by = 0.25))
+Quan_fit_Tube <- rq(meanTube ~ habitat, data = int_TM2, tau = seq(0.0, .95, by = 0.20))
 sumTube=summary(Quan_fit_Tube, se="boot")
-plot(sumTube)
 
-Quan_fit_Culmen <- rq(meanExpC ~ habitat*elevation, data = int_TM, tau = seq(0, 1, by = 0.25))
+## Plot with ggplot
+pvio1 = pvio + geom_abline(intercept=16.42, slope=0.14, linetype="dotted", linewidth=0.8, colour="black")
+pvio2 = pvio1 + geom_abline(intercept=20.80, slope=1.82, linetype="dashed", linewidth=0.8, colour="black")
+pvio3 = pvio2 + geom_abline(intercept=31.88, slope= 1.12, linetype="longdash", linewidth=0.8, colour="black")
+pvio4 = pvio3 + geom_abline(intercept=41.28, slope= -2.28, linetype="twodash", linewidth=0.8, colour="black")
+
+pvio4
+
+# Quantile regression bil length
+Quan_fit_Culmen <- rq(meanExpC ~ habitat, data = int_TM2, tau = seq(0.0, .95, by = 0.20))
 sumCul=summary(Quan_fit_Culmen, se="boot")
-plot(sumCul)
+
+
+# Plot with ggplot
+
+hvio1 = hvio + geom_abline(intercept=15.9284, slope=-2.43, linetype="dotted", linewidth=1, colour="black")
+hvio2 = hvio1 + geom_abline(intercept=18.00, slope=-0.00, linetype="dashed", linewidth=1, colour="black")
+hvio3 = hvio2 + geom_abline(intercept=22.27, slope= -1.91, linetype="twodash", linewidth=1, colour="black")
+hvio4 = hvio3 + geom_abline(intercept=40.26, slope= -7.63, linetype="longdash", linewidth=1, colour="black")
+
+hvio4
+
+Quan_fit_TM <- rq(trait_mismatch1 ~ habitat, data = int_TM2, tau = seq(0, .95, by = 0.20))
+sumTM=summary(Quan_fit_TM, se="boot")
+
+tmvio1 = tmvio + geom_abline(intercept=-5.81, slope=1.11, linetype="dotted", linewidth=1, colour="black")
+tmvio2 = tmvio1 + geom_abline(intercept=-0.29, slope=1.85, linetype="dashed", linewidth=1, colour="black")
+tmvio3 = tmvio2 + geom_abline(intercept=5.59, slope= 3.37, linetype="twodash", linewidth=1, colour="black")
+tmvio4 = tmvio3 + geom_abline(intercept=15.48, slope= 1.71, linetype="longdash", linewidth=1, colour="black")
+
+
+pvio4 + hvio4 + tmvio4
+
 
 # Conclusion: differences in trait distribution are significant at the 
-# lower and upper (bills) tails. Now we investigate if these differences affect
+# lower and upper tails  (bills). Now we investigate if these differences affect
 # linkage rules (neutral, niche-based [trait matching and barrier])
 
-# Remove outlier
-#int_TM3 <- int_TM[-3300,]
-#hist(int_TM3$trait_diff)
+# Examine corolla lengths of flowers visited by short, mid and long billed hummingbirds
+# For this we subset the data, according to hb bill length quantiles, then for each subset
+# we examine how the frequency of visits are distributed along the lengths of corollas and
+# by habitat type. 
+
+quant=quantile(int_TM2$meanExpC, probs = seq(0, 0.95, 0.20))
+
+sub_int_TM2 <- int_TM2[int_TM2$meanExpC <= 14.9, ] #0.20 quantile expculmen
+sub_int_TM3 <- int_TM2[int_TM2$meanExpC > 14.9,]
+sub_int_TM4 <- sub_int_TM3[sub_int_TM3$meanExpC <= 18, ] #0.40 quantile expculmen
+sub_int_TM5 <- int_TM2[int_TM2$meanExpC > 18,]
+sub_int_TM6 <- sub_int_TM5[sub_int_TM5$meanExpC <= 22.2, ] #0.60 quantile
+sub_int_TM7 <- int_TM2[int_TM2$meanExpC > 22.2,]
+sub_int_TM8 <- sub_int_TM7[sub_int_TM7$meanExpC <= 32.6, ] # 0.80 quantile
+
+# Get medians of corolla length of each subset
+
+median20=sub_int_TM2%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanTube), Median=median(meanTube))
+
+median40=sub_int_TM4%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanTube), Median=median(meanTube))
+
+median60=sub_int_TM6%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanTube), Median=median(meanTube))
+
+median80=sub_int_TM8%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanTube), Median=median(meanTube))
+
+## Plot the distribution of corolla lengths for each subset of bill lengths.
+## since this has only interactiona data, no 0s, these plots will indicate 
+## how frequently flowers with different corolla lengths are visited by short to long 
+## biled hbs
+
+bill_20 <- ggplot(sub_int_TM2, aes(x=meanTube, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,150) +
+  geom_vline(aes(xintercept = 18.6), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 22.2), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+bill_40 <- ggplot(sub_int_TM4, aes(x=meanTube, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,150) +
+  geom_vline(aes(xintercept = 22.2), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 26.2), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+bill_60 <- ggplot(sub_int_TM6, aes(x=meanTube, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,150) +
+  geom_vline(aes(xintercept = 20.8), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 22.8), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+bill_80 <- ggplot(sub_int_TM8, aes(x=meanTube, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        #axis.title.x=element_blank(),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,150) +
+  geom_vline(aes(xintercept = 29.7), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 33.3), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+
+bill_20 / bill_40 / bill_60 / bill_80
+
+# Examine bill lengths of hummingbirds visiting  short and long corolla flowers
+# is more or less the same as before, but subsetting hb bills by corolla
+# lengths.
+
+quantC=quantile(int_TM2$meanTube, probs = seq(0, 0.95, 0.20))
+
+sub_int_TM2C <- int_TM2[int_TM2$meanTube <= 16.5, ] #0.20 quantile corolla
+sub_int_TM3C <- int_TM2[int_TM2$meanTube > 16.5,]
+sub_int_TM4C <- sub_int_TM3C[sub_int_TM3C$meanTube <= 22.3, ] #0.40 quantile corolla
+sub_int_TM5C <- int_TM2[int_TM2$meanTube > 22.3,]
+sub_int_TM6C <- sub_int_TM5C[sub_int_TM5C$meanTube <= 32.1, ] # 0.60 quantile corolla
+sub_int_TM7C <- int_TM2[int_TM2$meanTube > 32.1,] 
+sub_int_TM8C <- sub_int_TM7C[sub_int_TM7C$meanTube <= 40.78, ] # 0.80 quantile corolla
+
+median20C=sub_int_TM2C%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanExpC), Median=median(meanExpC))
+
+median40C=sub_int_TM4C%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanExpC), Median=median(meanExpC))
+
+median60C=sub_int_TM6C%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanExpC), Median=median(meanExpC))
+
+median80C=sub_int_TM8C%>%
+  group_by(habitat)%>% 
+  summarise(Mean=mean(meanExpC), Median=median(meanExpC))
+
+cor20 <- ggplot(sub_int_TM2C, aes(x=meanExpC, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,100) +
+  geom_vline(aes(xintercept = 18), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 18), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+cor40 <- ggplot(sub_int_TM4C, aes(x=meanExpC, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,100) +
+  geom_vline(aes(xintercept = 17), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 18), color="#d8b365", linetype="dashed", linewidth=1)
+
+cor60 <- ggplot(sub_int_TM6C, aes(x=meanExpC, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Corolla length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,100) +
+  geom_vline(aes(xintercept = 26.7), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 20.4), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+cor80 <- ggplot(sub_int_TM7C, aes(x=meanExpC, fill=habitat)) +
+  #geom_violin(alpha=.3) +
+  xlab("Bill length (mm)") + ylab(" ") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        #axis.title.x=element_blank(),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=14,face="bold"),
+        strip.text = element_text(size=16),
+        legend.title = element_text(size = 16), 
+        plot.title = element_text(hjust = 0.5, size=16)) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + theme(legend.position = "none") +
+  geom_density(alpha=.3) + geom_rug () +  xlim(0,100) +
+  geom_vline(aes(xintercept = 26.7), color="#31a354", linetype="dashed", linewidth=1) + 
+  geom_vline(aes(xintercept = 20.4), color="#d8b365", linetype="dashed", linewidth=1)
+
+
+
+cor20 / cor40 / cor60 / cor80
+
+
 
 
 # We model interaction strength (number of visits per day),
 # as a function of habitat, trait matching, trait barrier
+# For this we use the 0 inputed data
 library(glmmTMB)
 library(ggeffects)
 library(jtools)
@@ -300,204 +518,61 @@ library(jtools)
 # Model daily visit rates of hummingbird to plants, as a function
 # of trait matching and trait barrier (niche-based) and 
 # habitat intercept as a proxy of neutral process. We also model 
-# the effect of elevation to absorb elevation/related variation, but 
+# the effect of elevation (as block ID) as random effect
+# to absorb elevation/related variation, but 
 # we focus on habitat effects.
 
-formula <- Rate ~ trait_match*habitat + trait_match*elevation +
-  #trait_MISM1*habitat + trait_MISM1*elevation +
-  (1|hummingbird2) + (1|plant2) 
+formula_model3 <- Y ~ (trait_match+barrier)*(habitat) + (1|hummingbird2) + (1|plant2) + (1|block2)
 
-a=glmmTMB(formula, family=gaussian, data=int_TM) # model without inputed 0s
 
-summary(a)
+
+e=glmmTMB(formula_model3, family=nbinom1, data=int_TM)    
+
+summary(e)
+
+car::Anova(e)
+performance::check_zeroinflation(e)
+
+#model=glmmTMB(Y~(trait_match+barrier)*habitat+offset(duration_sampling_hours)+(1|plant2)+(1|block2), data=int_TM, family=nbinom1)
+
 
 # Model evaluation
 
-simulationOutput <- simulateResiduals(fittedModel = a, plot = T)
+simulationOutput <- simulateResiduals(fittedModel = e, plot = T)
+residuals(simulationOutput, quantileFunction = qnorm, outlierValues = c(-7,7))
 
-# QQ plots and residuals vs predicted does not look great,
-# now we try with daily visit counts and poisson distribution
+testOutliers(e, plot = T, type='bootstrap')
 
-formula_b <- Y ~ trait_match*habitat + trait_match*elevation +
-  #trait_MISM1*habitat + trait_MISM1*elevation +
-  (1|hummingbird2) + (1|plant2)
-
-b=glmmTMB(formula_b, family=nbinom2, data=int_TM) 
-summary(b)
-
-# Model evaluation
-simulationOutput <- simulateResiduals(fittedModel = b, plot = T)
-
-
-# Slight improvement on qq plots but residuals vs predicted does not look good,
-# over dispersion we re-estimate coefficients by multiplying the standard error 
-# by the square root of the dispersion factor 2 and 
-# recomputing the Z- and p-values accordingly, following Bolker (2023)
-# https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#overdispersion)
-
-overdisp_fun <- function(model) {
-  rdf <- df.residual(model)
-  rp <- residuals(model,type="pearson")
-  Pearson.chisq <- sum(rp^2)
-  prat <- Pearson.chisq/rdf
-  pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
-  c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
-}
-
-quasi_table <- function(model,ctab=coef(summary(model)),
-                        phi=overdisp_fun(model)["ratio"]) {
-  qctab <- within(as.data.frame(ctab),
-                  {   `Std. Error` <- `Std. Error`*sqrt(phi)
-                  `z value` <- Estimate/`Std. Error`
-                  `Pr(>|z|)` <- 2*pnorm(abs(`z value`), lower.tail=FALSE)
-                  })
-  return(qctab)
-}
-
-printCoefmat(quasi_table(b,
-                         ctab=coef(summary(b))[["cond"]]),
-             digits=3)
-
-
-##  Now we try with the zero inputed data, model with poisson distribution and
-##  model with binomial response and probit link function
-
-int_TM0 <- fread("interaction_data_day_0s.txt", header=T, stringsAsFactors = FALSE)
-
-# Correct names
-
-#int_TM0 <- int_TM0 %>% mutate(final_plant_name=recode(final_plant_name, `Bomalera lutea`="Bomarea lutea", `Reneleamia sp2`="Renealmia sp2", `Nassa grandiflora`="Nasa grandiflora"))
-
-names(int_TM0)[1]="site"
-
-# Filter non paired forest sites
-
-int_TM <- int_TM0[-which(int_TM0$site %in% c("Yanacocha", "SantaLuciaUpper", "SantaLuciaLower", "Mashpi_Capuchin")),]
-
-
-
-# Add habitat variable with two levels (forest and deforested)
-
-int_TM <- int_TM %>% 
-  mutate(habitat = case_when(
-    endsWith(site, "pungo") ~ "forest",
-    endsWith(site, "decocha") ~ "forest",
-    endsWith(site, "ucuna") ~ "forest",
-    endsWith(site, "larias") ~ "forest",
-    endsWith(site, "Choco") ~ "forest",
-    endsWith(site, "tamia") ~ "forest",
-    endsWith(site, "aguna") ~ "forest",
-    endsWith(site, "urbed") ~ "deforested",
-    endsWith(site, "cunapi") ~ "deforested",
-    endsWith(site, "agusa") ~ "deforested",
-    endsWith(site, "sitana") ~ "deforested"
-  ))
-
-# Add block ID variable with 7 levels 
-
-int_TM <- int_TM %>% 
-  mutate(block = case_when(
-    endsWith(site, "decocha") ~ "Block7",
-    endsWith(site, "nacocha_disturbed") ~ "Block7",
-    endsWith(site, "pungo") ~ "Block6",
-    endsWith(site, "pungo_disturbed") ~ "Block6",
-    endsWith(site, "alarias") ~ "Block5",
-    endsWith(site, "unapi") ~ "Block5",
-    endsWith(site, "tamia") ~ "Block4",
-    endsWith(site, "tamia_disturbed") ~ "Block4",
-    endsWith(site, "pucuna") ~ "Block3",
-    endsWith(site, "misitana") ~ "Block3",
-    endsWith(site, "Laguna") ~ "Block2",
-    endsWith(site, "agusa") ~ "Block2",
-    endsWith(site, "Choco") ~ "Block1",
-    endsWith(site, "Choco_disturbed") ~ "Block1",
-  ))
-
-# Add mean block-elevation variable with 7 levels 
-
-int_TM <- int_TM %>% 
-  mutate(elevation = case_when(
-    endsWith(site, "decocha") ~ "3300",
-    endsWith(site, "nacocha_disturbed") ~ "3300",
-    endsWith(site, "pungo") ~ "2900",
-    endsWith(site, "pungo_disturbed") ~ "2900",
-    endsWith(site, "cunapi") ~ "1900",
-    endsWith(site, "larias") ~ "1900",
-    endsWith(site, "tamia") ~ "1700",
-    endsWith(site, "tamia_disturbed") ~ "1700",
-    endsWith(site, "pucuna") ~ "1500",
-    endsWith(site, "misitana") ~ "1500",
-    endsWith(site, "Laguna") ~ "1075",
-    endsWith(site, "gusa") ~ "1075",
-    endsWith(site, "Choco") ~ "1100",
-    endsWith(site, "Choco_disturbed") ~ "1100",
-  ))
-
-int_TM$elevation <- as.factor(int_TM$elevation)
-
-# Create TM and TB variables with absolute value of trait matching and trait barrier
-
-int_TM$trait_diff <- int_TM$meanTube-int_TM$meanExpC # extract trait difference
-int_TM$trait_match <- abs(int_TM$trait_diff)
-int_TM$trait_match_scale <- scale(int_TM$trait_match)
-
-int_TM$trbvec=0 # trait barrier variable indicating if an interaction is sorted as trait barrier
-int_TM$trbvec[int_TM$trait_diff<0]=1 # when trait barrier equal to one that means that corolla is longer than the bill (Santamaria Rodriguez-Girones 2007)
-int_TM$trmvec=0 # trait matching vector indicating if an interaction is sorted as trait matching
-int_TM$trmvec[int_TM$trait_diff>0]=1 # when trait matching equal to one that means that corolla is shorter than the bill
-
-# binary variable of interaction
-int_TM$Ybin=0 
-int_TM$Ybin[int_TM$Y>0]=1
-
-# Sort trait difference values as either trait matching or trait barrier 
-# These are the variables to use as predictors of niche-based process
-int_TM$trait_MATCH1 <- (abs(int_TM$trmvec*int_TM$trait_diff))
-int_TM$trait_MISM1 <- abs(int_TM$trbvec*int_TM$trait_diff)
-
-## Prepare variables for modelling 
-
-int_TM$hummingbird2=as.numeric(as.factor(int_TM$hummingbird_species)) # hummingbirds id as a factor
-int_TM$plant2=as.numeric(as.factor(int_TM$plant_species)) # plants id as a factor
-int_TM$site2=as.numeric(as.factor(int_TM$site))
-int_TM$block2=as.numeric(as.factor(int_TM$block))
-int_TM$habitat <- factor(int_TM$habitat, levels =(c("forest", "deforested"))) 
-
-### Models. Start wit binomial and probit link
-
-formula_b <- Ybin ~ trait_MATCH1*habitat + trait_MATCH1*elevation + 
-                    trait_MISM1*habitat + trait_MISM1*elevation +
-                    (1|hummingbird2) + (1|plant2)  
-
-c=glmmTMB(formula_b, family=binomial(link="logit"),
-          control=glmmTMBControl(parallel = 3),
-          ziformula=~1, data=int_TM)
-
-summary(c) # returning error message, needs debuging
-SimulationOutput <- simulateResiduals(fittedModel = c, plot = T)
-
-#Model with poisson error link
-int_TM$Y=as.numeric(int_TM$Y)
-formula_p <- Y ~  trait_MATCH1*habitat + trait_MATCH1*elevation + 
-  trait_MISM1*habitat + trait_MISM1*elevation +
-  (1|hummingbird2) + (1|plant2) # + I(habitat2) 
-
-
-d=glmmTMB(formula_p, family=poisson, control=glmmTMBControl(parallel = 3), ziformula=~1,data=int_TM)
-summary(d) # 
-
-#Model checking
-SimulationOutput <- simulateResiduals(fittedModel = d, plot = T) # Residuals vs fitted seem ok 
-check_zeroinflation(d) # no indication of zero inflation
-check_overdispersion(d) # despite the warnings, model looks ok
-
-compare_performance(c, d, rank=TRUE, verbose = FALSE)
-
-# Conclusion : model c, qq plot, and residual plots look ok, plus lower AIC values
-
-
+performance::r2(e)
+r.squaredGLMM(e)
+check_model(e)
 ## Plotting results
-p1=plot(ggpredict(c, terms = c("trait_MATCH1 [all]", "habitat"))) + 
+
+## Habitat effect
+habitateff=ggpredict(e, terms = c("habitat"))
+habitateff$group=c(1,2)
+
+p1=ggplot(habitateff, aes(x=x, y=predicted, color=group)) +
+  geom_pointrange( aes(ymin = conf.low, ymax = conf.high, color = x), linewidth=1) +
+  scale_color_manual(values=c('#31a354','#d8b365')) +
+  scale_fill_manual(values=c("blue", "green"), name="fill") +
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) + ylim(0,0.05) +
+  labs(x = "Habitat intercept", y = " ", title = " ")  
+
+## Trait matching * habitat effect
+
+p2=plot(ggpredict(e, terms = c("trait_match [all]", "habitat"))) + 
   theme_bw() +
   theme(axis.line = element_line(color='black'),
         plot.background = element_blank(),
@@ -510,15 +585,16 @@ p1=plot(ggpredict(c, terms = c("trait_MATCH1 [all]", "habitat"))) +
         axis.title=element_text(size=12,face="bold"), 
         strip.text = element_text(size=12),
         legend.title = element_text(size = 12)) +
-  labs(x = "Trait matching", y = "Interaction probability") + 
+  labs(x = "Trait matching", y = "Predicted interactions counts (log)", title = " ") + 
   scale_color_manual(values=c("#31a354", "#d8b365")) + 
   scale_fill_manual(values=c("#31a354", "#d8b365")) + 
-  geom_rug()
+  geom_rug(color="black") 
 
-p2=plot(ggpredict(c, terms = c("trait_MISM1 [all]", "habitat"))) + 
+p3=plot(ggpredict(e, terms = c("barrier [all]", "habitat"))) + 
   theme_bw() +
   theme(axis.line = element_line(color='black'),
         plot.background = element_blank(),
+        legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.grid.major = element_blank(),
         axis.text=element_text(size=12),
@@ -527,53 +603,146 @@ p2=plot(ggpredict(c, terms = c("trait_MISM1 [all]", "habitat"))) +
         axis.title=element_text(size=12,face="bold"), 
         strip.text = element_text(size=12),
         legend.title = element_text(size = 12)) +
-  labs(x = "Trait barrier", y = " ") + 
-  scale_color_manual(values=c("#31a354", "#d8b365")) + 
-  scale_fill_manual(values=c("#31a354", "#d8b365")) + 
-  geom_rug()
-
-
-p3=plot(ggpredict(c, terms = "habitat")) + 
-  theme_bw() +
-  theme(axis.line = element_line(color='black'),
-        plot.background = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_blank(),
-        axis.text=element_text(size=12),
-        #axis.text.x=element_blank(),
-        #axis.ticks.x=element_blank(),
-        axis.title=element_text(size=12,face="bold"), 
-        strip.text = element_text(size=12),
-        legend.title = element_text(size = 12)) +
-  labs(x = "Habitat intercept", y = " ") + 
-  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  labs(x = "Trait barrier", y = " ", title = " ") + ylim(0,0.05) +
+  scale_color_manual(values=c("#31a354", "#d8b365"))  +
   scale_fill_manual(values=c("#31a354", "#d8b365"))  
 
-p3 + p1 + p2
+p4=plot(ggpredict(e, terms = c("barrier [all]")), color="#d95f0e") + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) + ylim(0,0.05) +
+  labs(x = "Trait barrier (niche process)", y = "                                                          Predicted interactions counts (log)", title = " ")  
+
+p5=plot(ggpredict(e, terms = c("trait_match [all]")), color="#d95f0e") + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) +
+  labs(x = "Trait matching (niche process)", y = " ", title = " ") + 
+  geom_rug(color="black") 
 
 
-jtools::plot_summs(c, scale = TRUE)
-est <- jtools::plot_summs(d,
-                          coefs = c("Intercept" = "sd__(Intercept)",
-                                    "Habitat" = "habitatdeforested",
-                                    "Trait matching" = "trait_MATCH1", "Trait barrier" = "trait_MISM1",
-                                    "Habitat x Trait matching" = "trait_MATCH1:habitatdeforested",
-                                    "Habitat x Trait barrier" = "habitatdeforested:trait_MISM1"
-                          ),
-                          scale = TRUE, robust = TRUE, r.squared=FALSE)
+p6=plot(ggpredict(e, terms = c("trait_match [all]", "habitat"))) + 
+  theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) +
+  labs(x = "Trait matching", y = "Predicted interaction counts (log)", title = " ") + xlim(-15,0) +
+  scale_color_manual(values=c("#31a354", "#d8b365")) + 
+  scale_fill_manual(values=c("#31a354", "#d8b365")) + geom_rug(color="black")
 
-apatheme=theme_bw()+
-  theme(panel.grid.major=element_blank(),
-        panel.grid.minor=element_blank(),
-        panel.border=element_blank(),
-        axis.line=element_line(),
-        text=element_text(family='Helvetica'),
-        legend.title=element_blank(), 
-        axis.text=element_text(size=14),
-        axis.title=element_text(size=14),
-        legend.text = element_text(size = 14))
 
-p4= est + apatheme
+p5 + p4  
 
-p4 + (p3/p2/p1)
+p1 + p2 + p3 + p6
 
+
+coefs1=plot_model(e, show.values = TRUE, value.offset = .3, vline.color = "gray", show.intercept = TRUE,
+                  type = "std", terms = c("(Intercept)","trait_match", "barrier"), 
+                  axis.labels = c("Trait barrier (niche)", "Trait matching (niche)", "Intercept (neutral)"))
+
+
+coefs2=plot_model(e, show.values = TRUE, value.offset = .3, vline.color = "gray",  
+                  type = "std", terms = c("habitatdeforested", "trait_match:habitatdeforested", "barrier:habitatdeforested"), 
+                  axis.labels = c("Habitat (intercept)", "Habitat x Trait matching", "Habitat x Trait barrier")) 
+
+
+p7=coefs1 + theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) + coord_flip() + ylim(-0.1,3.0) +
+  labs(x = " ", y = "Incidence Rate Ratios", title = " ")
+
+
+p8=coefs2 + theme_bw() +
+  theme(axis.line = element_line(color='black'),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=12),
+        #axis.text.x=element_blank(),
+        #axis.ticks.x=element_blank(),
+        axis.title=element_text(size=12,face="bold"), 
+        strip.text = element_text(size=12),
+        legend.title = element_text(size = 12)) + coord_flip() + ylim(0.4,1.5) +
+  labs(x = " ", y = "Incidence Rate Ratios", title = " ")
+
+# Arrange plots
+
+p7 + ((p5 / p4 ))
+
+p8 + (p3 /p2 / p1 ) #/ ((p1 + p6))
+
+
+### Retrieve predicted number of interactions (trait_matching) data for network analysis
+
+modeldata=ggpredict(e, terms = c("trait_match [all]"))
+
+
+colnames(modeldata)[1] <- "trait_match"
+
+
+# Write prediction file	  
+fwrite(modeldata,"interactions_predicted_good2_with0s.txt",sep="\t") # predicted
+fwrite(int_TM, "data_for_model_intTM2_with0s.txt",sep="\t")   # observed
+
+## Read files
+
+int_TM_pr <- fread("data_for_model_intTM2_with0s.txt", header=T, stringsAsFactors = FALSE)
+predicted <- fread("interactions_predicted_good2_with0s.txt", header=T, stringsAsFactors = FALSE)
+
+colnames(predicted)[1] <- "trait_match"
+int_TM_pr <- int_TM_pr[, c(1,2,3,5,11,12)]
+
+### Join observed and predicted the numbers on both columns should be exactly the same
+
+
+df2 <- int_TM_pr %>% left_join(predicted, 
+                               by=c('trait_match'='trait_match'))
+
+# multiply the predicted values by 100 and round to get round numbers for null modelling
+df2$predicted2<-100*df2$predicted
+df2$predicted2=round(as.numeric(df2$predicted2, digits=0))
+
+
+#Plot predicted vs observed
+ggplot(df2, aes(x=sqrt(Y), y=predicted2)) + geom_smooth(method = lm, color="black") +
+            geom_point() + 
+            theme_bw() + ylab("Predicted values - trait matching") + xlab("daily visit counts")
+
+
+
+## Data for rebuild networks
+fwrite(df2,"interactions_predicted_good2.txt",sep="\t")
