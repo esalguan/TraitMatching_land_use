@@ -1,0 +1,852 @@
+library(ggplot2)
+library(bipartite)
+library(plyr)
+library(vegan)
+library(gridExtra)
+library(grid)
+library(cowplot)
+library(dplyr)
+library(reshape2)
+library(igraph)
+library(betapart)
+library(data.table)
+library(ggplotify)
+
+# Set working directory and read interaction data (observed and predicted)
+setwd(dir="C:/Users/esalg/Documents/TraitMatching/TraitMatching")
+
+intdat <-fread("interactions_predicted_good2.txt", header=T, stringsAsFactors = FALSE)
+
+# We remove 0s to subset networks by site and habitat, we add them later on for each network,
+# For observed data we use the mean daily interaction counts (Y) as interaction currency,
+# for predicted we use the mean predicted values of each pairwise interaction (predcited2)
+
+intdat=intdat[!(intdat$Y %in% "0"),]
+
+# Get networks by site with observed values
+# Verdecocha 
+
+Verdecocha <- (subset(intdat, site %in% c("Verdecocha")))
+VerdecochaM <- reshape2::melt(Verdecocha, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = TRUE, measure.vars="Y")
+names(VerdecochaM)[names(VerdecochaM) == "value"] <- "int_str"
+names(VerdecochaM)[names(VerdecochaM) == "hummingbird_species"] <- "bird_species"
+names(VerdecochaM)[names(VerdecochaM) == "final_plant_name"] <- "plant_species"
+VerdecochaM <- VerdecochaM[,-3]
+VerdecochaM2 <- reshape2::dcast(VerdecochaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(VerdecochaM2)[1] <- " "
+VerdecochaM3 <- VerdecochaM2[,-1]
+rownames(VerdecochaM3) <- VerdecochaM2[,1]
+veco1 <- data.frame(VerdecochaM3)
+veco <- data.matrix(veco1)
+veco[is.nan(veco)] <- 0
+veco[is.na(veco)] <- 0
+
+plotweb(veco, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# Yanacocha deforested
+YanacochaD <- (subset(intdat, site %in% c("Yanacocha_disturbed")))
+YanacochaDM <- reshape2::melt(YanacochaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(YanacochaDM)[names(YanacochaDM) == "value"] <- "int_str"
+names(YanacochaDM)[names(YanacochaDM) == "hummingbird_species"] <- "bird_species"
+names(YanacochaDM)[names(YanacochaDM) == "plant_species"] <- "plant_species"
+YanacochaDM <- YanacochaDM[,-3]
+YanacochaDM2 <- reshape2::dcast(YanacochaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(YanacochaDM2)[1] <- " "
+YanacochaDM3 <- YanacochaDM2[,-1]
+rownames(YanacochaDM3) <- YanacochaDM2[,1]
+yanad1 <- data.frame(YanacochaDM3)
+yanad <- data.matrix(yanad1)
+yanad[is.nan(yanad)] <- 0
+yanad[is.na(yanad)] <- 0
+yan=sortweb(yanad, sort.order = "desc")
+yanadr= round(yanad) 
+
+plotweb(yanad, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+
+
+# Alaspungo forest
+Alaspungo <- (subset(intdat, site %in% c("Alaspungo")))
+AlaspungoM <- reshape2::melt(Alaspungo, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(AlaspungoM)[names(AlaspungoM) == "value"] <- "int_str"
+names(AlaspungoM)[names(AlaspungoM) == "hummingbird_species"] <- "bird_species"
+names(AlaspungoM)[names(AlaspungoM) == "plant_species"] <- "plant_species"
+AlaspungoM <- AlaspungoM[,-3]
+AlaspungoM2 <- reshape2::dcast(AlaspungoM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AlaspungoM2)[1] <- " "
+AlaspungoM3 <- AlaspungoM2[,-1]
+rownames(AlaspungoM3) <- AlaspungoM2[,1]
+alas1 <- data.frame(AlaspungoM3)
+alas <- data.matrix(alas1)
+alas[is.nan(alas)] <- 0
+alas[is.na(alas)] <- 0
+alasr= round(alas) 
+plotweb(alas, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Alaspungo deforested
+AlaspungoD <- (subset(intdat, site %in% c("Alaspungo_disturbed")))
+AlaspungoDM <- reshape2::melt(AlaspungoD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(AlaspungoDM)[names(AlaspungoDM) == "value"] <- "int_str"
+names(AlaspungoDM)[names(AlaspungoDM) == "hummingbird_species"] <- "bird_species"
+names(AlaspungoDM)[names(AlaspungoDM) == "plant_species"] <- "plant_species"
+AlaspungoDM <- AlaspungoDM[,-3]
+AlaspungoDM2 <- reshape2::dcast(AlaspungoDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AlaspungoDM2)[1] <- " "
+AlaspungoDM3 <- AlaspungoDM2[,-1]
+rownames(AlaspungoDM3) <- AlaspungoDM2[,1]
+alasd1 <- data.frame(AlaspungoDM3)
+alasd <- data.matrix(alasd1)
+alasd[is.na(alas)] <- 0
+
+is.nan.data.frame <- function(x)
+  do.call(cbind, lapply(x, is.nan)) # Get ride of the NaN and replace them with 0s
+alasd[is.nan(alasd)] <- 0
+
+
+
+plotweb(alasd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Gralarias forest
+Gralarias <- (subset(intdat, site %in% c("LasGralarias")))
+GralariasM <- reshape2::melt(Gralarias, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(GralariasM)[names(GralariasM) == "value"] <- "int_str"
+names(GralariasM)[names(GralariasM) == "hummingbird_species"] <- "bird_species"
+names(GralariasM)[names(GralariasM) == "plant_species"] <- "plant_species"
+GralariasM <- GralariasM[,-3]
+GralariasM2 <- reshape2::dcast(GralariasM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(GralariasM2)[1] <- " "
+GralariasM3 <- GralariasM2[,-1]
+rownames(GralariasM3) <- GralariasM2[,1]
+gral1 <- data.frame(GralariasM3)
+gral <- data.matrix(gral1)
+gral[is.nan(gral)] <- 0
+gral[is.na(gral)] <- 0
+plotweb(gral, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Puyucunapi deforested
+PuyucunapiD <- (subset(intdat, site %in% c("Puyucunapi")))
+PuyucunapiDM <- reshape2::melt(PuyucunapiD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(PuyucunapiDM)[names(PuyucunapiDM) == "value"] <- "int_str"
+names(PuyucunapiDM)[names(PuyucunapiDM) == "hummingbird_species"] <- "bird_species"
+names(PuyucunapiDM)[names(PuyucunapiDM) == "plant_species"] <- "plant_species"
+PuyucunapiDM <- PuyucunapiDM[,-3]
+PuyucunapiDM2 <- reshape2::dcast(PuyucunapiDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(PuyucunapiDM2)[1] <- " "
+PuyucunapiDM3 <- PuyucunapiDM2[,-1]
+rownames(PuyucunapiDM3) <- PuyucunapiDM2[,1]
+puyud1 <- data.frame(PuyucunapiDM3)
+puyud <- data.matrix(puyud1)
+puyud[is.nan(puyud)] <- 0
+puyud[is.na(puyud)] <- 0
+plotweb(puyud, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Maquipucuna forest
+Maquipucuna <- (subset(intdat, site %in% c("Maquipucuna")))
+MaquipucunaM <- reshape2::melt(Maquipucuna, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(MaquipucunaM)[names(MaquipucunaM) == "value"] <- "int_str"
+names(MaquipucunaM)[names(MaquipucunaM) == "hummingbird_species"] <- "bird_species"
+names(MaquipucunaM)[names(MaquipucunaM) == "plant_species"] <- "plant_species"
+MaquipucunaM <- MaquipucunaM[,-3]
+MaquipucunaM2 <- reshape2::dcast(MaquipucunaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(MaquipucunaM2)[1] <- " "
+MaquipucunaM3 <- MaquipucunaM2[,-1]
+rownames(MaquipucunaM3) <- MaquipucunaM2[,1]
+maqu1 <- data.frame(MaquipucunaM3)
+maqu <- data.matrix(maqu1)
+maqu[is.nan(maqu)] <- 0
+maqu[is.na(maqu)] <- 0
+maqur= round(maqu)
+plotweb(maqu, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Rumisitana deforested
+RumisitanaD <- (subset(intdat, site %in% c("Rumisitana")))
+RumisitanaDM <- reshape2::melt(RumisitanaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(RumisitanaDM)[names(RumisitanaDM) == "value"] <- "int_str"
+names(RumisitanaDM)[names(RumisitanaDM) == "hummingbird_species"] <- "bird_species"
+names(RumisitanaDM)[names(RumisitanaDM) == "plant_species"] <- "plant_species"
+RumisitanaDM <- RumisitanaDM[,-3]
+RumisitanaDM2 <- reshape2::dcast(RumisitanaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(RumisitanaDM2)[1] <- " "
+RumisitanaDM3 <- RumisitanaDM2[,-1]
+rownames(RumisitanaDM3) <- RumisitanaDM2[,1]
+rumid1 <- data.frame(RumisitanaDM3)
+rumid <- data.matrix(rumid1)
+rumid[is.nan(rumid)] <- 0
+rumid[is.na(rumid)] <- 0
+rumidr= round(rumid)
+plotweb(rumid, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+# Sachatamia forest
+Sachatamia <- (subset(intdat, site %in% c("Sachatamia")))
+SachatamiaM <- reshape2::melt(Sachatamia, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(SachatamiaM)[names(SachatamiaM) == "value"] <- "int_str"
+names(SachatamiaM)[names(SachatamiaM) == "hummingbird_species"] <- "bird_species"
+names(SachatamiaM)[names(SachatamiaM) == "plant_species"] <- "plant_species"
+SachatamiaM <- SachatamiaM[,-3]
+SachatamiaM2 <- reshape2::dcast(SachatamiaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(SachatamiaM2)[1] <- " "
+SachatamiaM3 <- SachatamiaM2[,-1]
+rownames(SachatamiaM3) <- SachatamiaM2[,1]
+sach1 <- data.frame(SachatamiaM3)
+sach <- data.matrix(sach1)
+sach[is.nan(sach)] <- 0
+sach[is.na(sach)] <- 0
+sachr= round(sach)
+plotweb(sach, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# Sachatamia deforested
+SachatamiaD <- (subset(intdat, site %in% c("Sachatamia_disturbed")))
+SachatamiaDM <- reshape2::melt(SachatamiaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(SachatamiaDM)[names(SachatamiaDM) == "value"] <- "int_str"
+names(SachatamiaDM)[names(SachatamiaDM) == "hummingbird_species"] <- "bird_species"
+names(SachatamiaDM)[names(SachatamiaDM) == "plant_species"] <- "plant_species"
+SachatamiaDM <- SachatamiaDM[,-3]
+SachatamiaDM2 <- reshape2::dcast(SachatamiaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(SachatamiaDM2)[1] <- " "
+SachatamiaDM3 <- SachatamiaDM2[,-1]
+rownames(SachatamiaDM3) <- SachatamiaDM2[,1]
+sachad1 <- data.frame(SachatamiaDM3)
+sachad <- data.matrix(sachad1)
+sachad[is.nan(sachad)] <- 0
+sachad[is.na(sachad)] <- 0
+sachadr= round(sachad)
+plotweb(sachad, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# MashpiLaguna forest
+Mashpi <- (subset(intdat, site %in% c("MashpiLaguna")))
+MashpiM <- reshape2::melt(Mashpi, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(MashpiM)[names(MashpiM) == "value"] <- "int_str"
+names(MashpiM)[names(MashpiM) == "hummingbird_species"] <- "bird_species"
+names(MashpiM)[names(MashpiM) == "plant_species"] <- "plant_species"
+MashpiM <- MashpiM[,-3]
+MashpiM2 <- reshape2::dcast(MashpiM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(MashpiM2)[1] <- " "
+MashpiM3 <- MashpiM2[,-1]
+rownames(MashpiM3) <- MashpiM2[,1]
+mash1 <- data.frame(MashpiM3)
+mash <- data.matrix(mash1)
+mash[is.nan(mash)] <- 0
+mash[is.na(mash)] <- 0
+mashr= round(mash)
+plotweb(mash, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+
+# Amagusa deforested
+AmagusaD <- (subset(intdat, site %in% c("Amagusa")))
+AmagusaDM <- reshape2::melt(AmagusaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(AmagusaDM)[names(AmagusaDM) == "value"] <- "int_str"
+names(AmagusaDM)[names(AmagusaDM) == "hummingbird_species"] <- "bird_species"
+names(AmagusaDM)[names(AmagusaDM) == "plant_species"] <- "plant_species"
+AmagusaDM <- AmagusaDM[,-3]
+AmagusaDM2 <- reshape2::dcast(AmagusaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AmagusaDM2)[1] <- " "
+AmagusaDM3 <- AmagusaDM2[,-1]
+rownames(AmagusaDM3) <- AmagusaDM2[,1]
+amagd1 <- data.frame(AmagusaDM3)
+amagd <- data.matrix(amagd1)
+amagd[is.nan(amagd)] <- 0
+amagd[is.na(amagd)] <- 0
+amagdr= round(amagd)
+plotweb(amagd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+# Un Poco del Choco Forest
+UPDC <- (subset(intdat, site %in% c("UnPocoChoco")))
+UPDCM <- reshape2::melt(UPDC, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(UPDCM)[names(UPDCM) == "value"] <- "int_str"
+names(UPDCM)[names(UPDCM) == "hummingbird_species"] <- "bird_species"
+names(UPDCM)[names(UPDCM) == "plant_species"] <- "plant_species"
+UPDCM <- UPDCM[,-3]
+UPDCM2 <- reshape2::dcast(UPDCM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(UPDCM2)[1] <- " "
+UPDCM3 <- UPDCM2[,-1]
+rownames(UPDCM3) <- UPDCM2[,1]
+updc1 <- data.frame(UPDCM3)
+updc <- data.matrix(updc1)
+updc[is.nan(updc)] <- 0
+updc[is.na(updc)] <- 0
+updcr= round(updc)
+plotweb(updc, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+
+# Un Poco del Choco Deforested
+UPDCD <- (subset(intdat, site %in% c("UnPocoDelChoco_disturbed")))
+UPDCDM <- reshape2::melt(UPDCD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="Y")
+names(UPDCDM)[names(UPDCDM) == "value"] <- "int_str"
+names(UPDCDM)[names(UPDCDM) == "hummingbird_species"] <- "bird_species"
+names(UPDCDM)[names(UPDCDM) == "plant_species"] <- "plant_species"
+UPDCDM <- UPDCDM[,-3]
+UPDCDM2 <- reshape2::dcast(UPDCDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(UPDCDM2)[1] <- " "
+UPDCDM3 <- UPDCDM2[,-1]
+rownames(UPDCDM3) <- UPDCDM2[,1]
+updcd1 <- data.frame(UPDCDM3)
+updcd <- data.matrix(updcd1)
+updcd[is.nan(updcd)] <- 0
+updcd[is.na(updcd)] <- 0
+updcdr= round(updcd)
+plotweb(updcd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+## Calculate network metrics
+## Create a list of networks from high to low elevation (7 forest, 7 deforested)
+## webistO list of observed networks
+
+weblistO <- lapply(c("veco", "alas", "gral", "sach", "maqu", "mash", "updc",
+                    "yanad", "alasd", "puyud", "sachad", "rumid", "amagd", "updcd"), get)
+
+metricsObs=as.data.frame(t(ldply(weblistO, networklevel)))
+
+names(metricsObs)=c("vecor", "alasr", "gralr", "sachr", "maqur", "mashr", "updcr",
+                    "yanadr", "alasdr", "puyudr", "sachadr", "rumidr", "amagdr", "updcdr")
+
+metricsObs=as.data.frame(t(metricsObs))
+
+metricsObs$habitat <- c("forest", "forest", "forest", "forest", "forest", "forest", "forest", 
+                        "deforested", "deforested", "deforested", "deforested", "deforested", "deforested", "deforested")  
+
+
+################################################################################
+################## Build networks with predicted values ######################## 
+################################################################################
+
+# Get networks by site with predicted values (predicted2)
+# Verdecocha 
+
+Verdecocha <- (subset(intdat, site %in% c("Verdecocha")))
+VerdecochaM <- reshape2::melt(Verdecocha, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = TRUE, measure.vars="predicted2")
+names(VerdecochaM)[names(VerdecochaM) == "value"] <- "int_str"
+names(VerdecochaM)[names(VerdecochaM) == "hummingbird_species"] <- "bird_species"
+names(VerdecochaM)[names(VerdecochaM) == "final_plant_name"] <- "plant_species"
+VerdecochaM <- VerdecochaM[,-3]
+VerdecochaM2 <- reshape2::dcast(VerdecochaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(VerdecochaM2)[1] <- " "
+VerdecochaM3 <- VerdecochaM2[,-1]
+rownames(VerdecochaM3) <- VerdecochaM2[,1]
+veco1 <- data.frame(VerdecochaM3)
+veco <- data.matrix(veco1)
+veco[is.nan(veco)] <- 0
+veco[is.na(veco)] <- 0
+
+plotweb(veco, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# Yanacocha deforested
+YanacochaD <- (subset(intdat, site %in% c("Yanacocha_disturbed")))
+YanacochaDM <- reshape2::melt(YanacochaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(YanacochaDM)[names(YanacochaDM) == "value"] <- "int_str"
+names(YanacochaDM)[names(YanacochaDM) == "hummingbird_species"] <- "bird_species"
+names(YanacochaDM)[names(YanacochaDM) == "plant_species"] <- "plant_species"
+YanacochaDM <- YanacochaDM[,-3]
+YanacochaDM2 <- reshape2::dcast(YanacochaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(YanacochaDM2)[1] <- " "
+YanacochaDM3 <- YanacochaDM2[,-1]
+rownames(YanacochaDM3) <- YanacochaDM2[,1]
+yanad1 <- data.frame(YanacochaDM3)
+yanad <- data.matrix(yanad1)
+yanad[is.nan(yanad)] <- 0
+yanad[is.na(yanad)] <- 0
+yan=sortweb(yanad, sort.order = "desc")
+yanadr= round(yanad) 
+
+plotweb(yanad, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+
+
+# Alaspungo forest
+Alaspungo <- (subset(intdat, site %in% c("Alaspungo")))
+AlaspungoM <- reshape2::melt(Alaspungo, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(AlaspungoM)[names(AlaspungoM) == "value"] <- "int_str"
+names(AlaspungoM)[names(AlaspungoM) == "hummingbird_species"] <- "bird_species"
+names(AlaspungoM)[names(AlaspungoM) == "plant_species"] <- "plant_species"
+AlaspungoM <- AlaspungoM[,-3]
+AlaspungoM2 <- reshape2::dcast(AlaspungoM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AlaspungoM2)[1] <- " "
+AlaspungoM3 <- AlaspungoM2[,-1]
+rownames(AlaspungoM3) <- AlaspungoM2[,1]
+alas1 <- data.frame(AlaspungoM3)
+alas <- data.matrix(alas1)
+alas[is.nan(alas)] <- 0
+alas[is.na(alas)] <- 0
+alasr= round(alas) 
+plotweb(alas, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Alaspungo deforested
+AlaspungoD <- (subset(intdat, site %in% c("Alaspungo_disturbed")))
+AlaspungoDM <- reshape2::melt(AlaspungoD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(AlaspungoDM)[names(AlaspungoDM) == "value"] <- "int_str"
+names(AlaspungoDM)[names(AlaspungoDM) == "hummingbird_species"] <- "bird_species"
+names(AlaspungoDM)[names(AlaspungoDM) == "plant_species"] <- "plant_species"
+AlaspungoDM <- AlaspungoDM[,-3]
+AlaspungoDM2 <- reshape2::dcast(AlaspungoDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AlaspungoDM2)[1] <- " "
+AlaspungoDM3 <- AlaspungoDM2[,-1]
+rownames(AlaspungoDM3) <- AlaspungoDM2[,1]
+alasd1 <- data.frame(AlaspungoDM3)
+alasd <- data.matrix(alasd1)
+alasd[is.na(alas)] <- 0
+
+is.nan.data.frame <- function(x)
+  do.call(cbind, lapply(x, is.nan)) # Get ride of the NaN and replace them with 0s
+alasd[is.nan(alasd)] <- 0
+
+
+
+plotweb(alasd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Gralarias forest
+Gralarias <- (subset(intdat, site %in% c("LasGralarias")))
+GralariasM <- reshape2::melt(Gralarias, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(GralariasM)[names(GralariasM) == "value"] <- "int_str"
+names(GralariasM)[names(GralariasM) == "hummingbird_species"] <- "bird_species"
+names(GralariasM)[names(GralariasM) == "plant_species"] <- "plant_species"
+GralariasM <- GralariasM[,-3]
+GralariasM2 <- reshape2::dcast(GralariasM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(GralariasM2)[1] <- " "
+GralariasM3 <- GralariasM2[,-1]
+rownames(GralariasM3) <- GralariasM2[,1]
+gral1 <- data.frame(GralariasM3)
+gral <- data.matrix(gral1)
+gral[is.nan(gral)] <- 0
+gral[is.na(gral)] <- 0
+plotweb(gral, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Puyucunapi deforested
+PuyucunapiD <- (subset(intdat, site %in% c("Puyucunapi")))
+PuyucunapiDM <- reshape2::melt(PuyucunapiD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(PuyucunapiDM)[names(PuyucunapiDM) == "value"] <- "int_str"
+names(PuyucunapiDM)[names(PuyucunapiDM) == "hummingbird_species"] <- "bird_species"
+names(PuyucunapiDM)[names(PuyucunapiDM) == "plant_species"] <- "plant_species"
+PuyucunapiDM <- PuyucunapiDM[,-3]
+PuyucunapiDM2 <- reshape2::dcast(PuyucunapiDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(PuyucunapiDM2)[1] <- " "
+PuyucunapiDM3 <- PuyucunapiDM2[,-1]
+rownames(PuyucunapiDM3) <- PuyucunapiDM2[,1]
+puyud1 <- data.frame(PuyucunapiDM3)
+puyud <- data.matrix(puyud1)
+puyud[is.nan(puyud)] <- 0
+puyud[is.na(puyud)] <- 0
+plotweb(puyud, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Maquipucuna forest
+Maquipucuna <- (subset(intdat, site %in% c("Maquipucuna")))
+MaquipucunaM <- reshape2::melt(Maquipucuna, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(MaquipucunaM)[names(MaquipucunaM) == "value"] <- "int_str"
+names(MaquipucunaM)[names(MaquipucunaM) == "hummingbird_species"] <- "bird_species"
+names(MaquipucunaM)[names(MaquipucunaM) == "plant_species"] <- "plant_species"
+MaquipucunaM <- MaquipucunaM[,-3]
+MaquipucunaM2 <- reshape2::dcast(MaquipucunaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(MaquipucunaM2)[1] <- " "
+MaquipucunaM3 <- MaquipucunaM2[,-1]
+rownames(MaquipucunaM3) <- MaquipucunaM2[,1]
+maqu1 <- data.frame(MaquipucunaM3)
+maqu <- data.matrix(maqu1)
+maqu[is.nan(maqu)] <- 0
+maqu[is.na(maqu)] <- 0
+maqur= round(maqu)
+plotweb(maqu, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+# Rumisitana deforested
+RumisitanaD <- (subset(intdat, site %in% c("Rumisitana")))
+RumisitanaDM <- reshape2::melt(RumisitanaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(RumisitanaDM)[names(RumisitanaDM) == "value"] <- "int_str"
+names(RumisitanaDM)[names(RumisitanaDM) == "hummingbird_species"] <- "bird_species"
+names(RumisitanaDM)[names(RumisitanaDM) == "plant_species"] <- "plant_species"
+RumisitanaDM <- RumisitanaDM[,-3]
+RumisitanaDM2 <- reshape2::dcast(RumisitanaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(RumisitanaDM2)[1] <- " "
+RumisitanaDM3 <- RumisitanaDM2[,-1]
+rownames(RumisitanaDM3) <- RumisitanaDM2[,1]
+rumid1 <- data.frame(RumisitanaDM3)
+rumid <- data.matrix(rumid1)
+rumid[is.nan(rumid)] <- 0
+rumid[is.na(rumid)] <- 0
+rumidr= round(rumid)
+plotweb(rumid, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+# Sachatamia forest
+Sachatamia <- (subset(intdat, site %in% c("Sachatamia")))
+SachatamiaM <- reshape2::melt(Sachatamia, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(SachatamiaM)[names(SachatamiaM) == "value"] <- "int_str"
+names(SachatamiaM)[names(SachatamiaM) == "hummingbird_species"] <- "bird_species"
+names(SachatamiaM)[names(SachatamiaM) == "plant_species"] <- "plant_species"
+SachatamiaM <- SachatamiaM[,-3]
+SachatamiaM2 <- reshape2::dcast(SachatamiaM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(SachatamiaM2)[1] <- " "
+SachatamiaM3 <- SachatamiaM2[,-1]
+rownames(SachatamiaM3) <- SachatamiaM2[,1]
+sach1 <- data.frame(SachatamiaM3)
+sach <- data.matrix(sach1)
+sach[is.nan(sach)] <- 0
+sach[is.na(sach)] <- 0
+sachr= round(sach)
+plotweb(sach, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# Sachatamia deforested
+SachatamiaD <- (subset(intdat, site %in% c("Sachatamia_disturbed")))
+SachatamiaDM <- reshape2::melt(SachatamiaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(SachatamiaDM)[names(SachatamiaDM) == "value"] <- "int_str"
+names(SachatamiaDM)[names(SachatamiaDM) == "hummingbird_species"] <- "bird_species"
+names(SachatamiaDM)[names(SachatamiaDM) == "plant_species"] <- "plant_species"
+SachatamiaDM <- SachatamiaDM[,-3]
+SachatamiaDM2 <- reshape2::dcast(SachatamiaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(SachatamiaDM2)[1] <- " "
+SachatamiaDM3 <- SachatamiaDM2[,-1]
+rownames(SachatamiaDM3) <- SachatamiaDM2[,1]
+sachad1 <- data.frame(SachatamiaDM3)
+sachad <- data.matrix(sachad1)
+sachad[is.nan(sachad)] <- 0
+sachad[is.na(sachad)] <- 0
+sachadr= round(sachad)
+plotweb(sachad, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+# MashpiLaguna forest
+Mashpi <- (subset(intdat, site %in% c("MashpiLaguna")))
+MashpiM <- reshape2::melt(Mashpi, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(MashpiM)[names(MashpiM) == "value"] <- "int_str"
+names(MashpiM)[names(MashpiM) == "hummingbird_species"] <- "bird_species"
+names(MashpiM)[names(MashpiM) == "plant_species"] <- "plant_species"
+MashpiM <- MashpiM[,-3]
+MashpiM2 <- reshape2::dcast(MashpiM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(MashpiM2)[1] <- " "
+MashpiM3 <- MashpiM2[,-1]
+rownames(MashpiM3) <- MashpiM2[,1]
+mash1 <- data.frame(MashpiM3)
+mash <- data.matrix(mash1)
+mash[is.nan(mash)] <- 0
+mash[is.na(mash)] <- 0
+mashr= round(mash)
+plotweb(mash, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7)) 
+
+
+# Amagusa deforested
+AmagusaD <- (subset(intdat, site %in% c("Amagusa")))
+AmagusaDM <- reshape2::melt(AmagusaD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(AmagusaDM)[names(AmagusaDM) == "value"] <- "int_str"
+names(AmagusaDM)[names(AmagusaDM) == "hummingbird_species"] <- "bird_species"
+names(AmagusaDM)[names(AmagusaDM) == "plant_species"] <- "plant_species"
+AmagusaDM <- AmagusaDM[,-3]
+AmagusaDM2 <- reshape2::dcast(AmagusaDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(AmagusaDM2)[1] <- " "
+AmagusaDM3 <- AmagusaDM2[,-1]
+rownames(AmagusaDM3) <- AmagusaDM2[,1]
+amagd1 <- data.frame(AmagusaDM3)
+amagd <- data.matrix(amagd1)
+amagd[is.nan(amagd)] <- 0
+amagd[is.na(amagd)] <- 0
+amagdr= round(amagd)
+plotweb(amagd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+# Un Poco del Choco Forest
+UPDC <- (subset(intdat, site %in% c("UnPocoChoco")))
+UPDCM <- reshape2::melt(UPDC, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(UPDCM)[names(UPDCM) == "value"] <- "int_str"
+names(UPDCM)[names(UPDCM) == "hummingbird_species"] <- "bird_species"
+names(UPDCM)[names(UPDCM) == "plant_species"] <- "plant_species"
+UPDCM <- UPDCM[,-3]
+UPDCM2 <- reshape2::dcast(UPDCM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(UPDCM2)[1] <- " "
+UPDCM3 <- UPDCM2[,-1]
+rownames(UPDCM3) <- UPDCM2[,1]
+updc1 <- data.frame(UPDCM3)
+updc <- data.matrix(updc1)
+updc[is.nan(updc)] <- 0
+updc[is.na(updc)] <- 0
+updcr= round(updc)
+plotweb(updc, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+
+
+# Un Poco del Choco Deforested
+UPDCD <- (subset(intdat, site %in% c("UnPocoDelChoco_disturbed")))
+UPDCDM <- reshape2::melt(UPDCD, id.vars=c("hummingbird_species", "plant_species"), factorsAsStrings = FALSE, measure.vars="predicted2")
+names(UPDCDM)[names(UPDCDM) == "value"] <- "int_str"
+names(UPDCDM)[names(UPDCDM) == "hummingbird_species"] <- "bird_species"
+names(UPDCDM)[names(UPDCDM) == "plant_species"] <- "plant_species"
+UPDCDM <- UPDCDM[,-3]
+UPDCDM2 <- reshape2::dcast(UPDCDM, formula =  plant_species ~ bird_species, fun.aggregate = mean)
+names(UPDCDM2)[1] <- " "
+UPDCDM3 <- UPDCDM2[,-1]
+rownames(UPDCDM3) <- UPDCDM2[,1]
+updcd1 <- data.frame(UPDCDM3)
+updcd <- data.matrix(updcd1)
+updcd[is.nan(updcd)] <- 0
+updcd[is.na(updcd)] <- 0
+updcdr= round(updcd)
+plotweb(updcd, method = "cca", text.rot = 90, labsize = 1, 
+        col.high ="#e34a33", bor.col.high="black", 
+        col.low ="#addd8e", bor.col.low = "black",
+        bor.col.interaction = "black", y.lim=c(-0.6,2.7))
+
+## Create a list of networks with predicted values (predicted2)
+
+weblistP <- lapply(c("veco", "alas", "gral", "sach", "maqu", "mash", "updc",
+                     "yanad", "alasd", "puyud", "sachad", "rumid", "amagd", "updcd"), get)
+
+metricsPred=as.data.frame(t(ldply(weblistP, networklevel))) # use with predicted2
+
+names(metricsPred)=c("vecor", "alasr", "gralr", "sachr", "maqur", "mashr", "updcr",
+"yanadr", "alasdr", "puyudr", "sachadr", "rumidr", "amagdr", "updcdr")
+
+metricsPred=as.data.frame(t(metricsPred))
+
+metricsPred$habitat <- c("forest", "forest", "forest", "forest", "forest", "forest", "forest", 
+ "deforested", "deforested", "deforested", "deforested", "deforested", "deforested", "deforested")  
+
+
+
+# Null models
+# Write a function to compute the desired statistic, e.g. the difference
+# between forest and deforested. We use three network metrics connectance, weighted nestedness H2, 
+
+# define colors 
+predicted <- rgb(44,127,184,max = 255, alpha = 80, names = "lt.blue")
+observed <- rgb(221,28,119, max = 255, alpha = 80, names = "lt.red")
+
+### 1. Connectance
+meandiffC <- function(webs){
+  obs <- sapply(webs, networklevel, index="weighted connectance")
+  mean(obs[8:14]) - mean(obs[1:7])
+}
+
+(observedC <- meandiffC(weblistO))
+(predictedC <- meandiffC(weblistP))
+
+## Obtain null models
+
+resCO <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistO, nullmodel, N=1, method="shuffle.web")
+  resCO[i] <- meandiffC(nulllist)
+}
+
+resCP <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistP, nullmodel, N=1, method="shuffle.web")
+  resCP[i] <- meandiffC(nulllist)
+}
+
+
+hcobs<-hist(resCO, border="white", col="lightgreen", cex.axis = 2, cex.lab=3,
+            main = "Connectance", cex.lab=1.5, xlim=c(-0.040,0.015))
+
+hcpred <- hist(resCP, border="white", col="lightblue", cex.axis = 2, cex.lab=3,
+               main = "Connectance", cex.lab=1.5, xlim=c(-0.040,0.015))
+
+
+
+
+plot(hcpred, col=predicted, xlim=c(-0.040,-0.001), cex.axis = 2) # Plot 1st histogram using a transparent color
+plot(hcobs, col=observed, xlim=c(-0.040,-0.001), add = TRUE) # Add 2nd histogram using different color
+
+abline(v=predictedC, col="#2b8cbe", lwd=3, lty=2)
+abline(v=observedC, col="#dd1c77", lwd=3, lty=2)
+
+
+# 2. weigthed nestedness
+
+meandiffN <- function(webs){
+  obs <- sapply(webs, networklevel, index="weighted nestedness")
+  mean(obs[8:14]) - mean(obs[1:7])
+}
+
+(observedN <- meandiffN(weblistO))
+(predictedN <- meandiffN(weblistP))
+
+
+resNO <- 1:1000
+for (i in 1:1000){ # takes a few minutes !!
+  nulllist <- sapply(weblistO, nullmodel, N=1, method="shuffle.web")
+  resNO[i] <- meandiffN(nulllist)
+}
+
+resNP <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistP, nullmodel, N=1, method="shuffle.web")
+  resNP[i] <- meandiffN(nulllist)
+}
+
+
+hnpred<-hist(resNP, border="white", col="lightblue", cex.axis = 2, cex.lab=3, ylab = " ",  xlab="Mean difference between habitats calculated from null models",
+             main = "Weigthed nestedness", cex.lab=1.5,  xlim=c(-0.12, 0.12),)
+hnpobs<-hist(resNO, border="white", col="lightgreen", cex.axis = 2, cex.lab=3, ylab = " ",  xlab="Mean difference between habitats calculated from null models",
+             main = "Weigthed nestedness", cex.lab=1.5,  xlim=c(-0.12, 0.12),)
+
+plot(hnpred, col=predicted,cex.axis = 2) # Plot 1st histogram using a transparent color
+plot(hnpobs, col=observed, add = TRUE) # Add 2nd histogram using different color
+
+abline(v=predictedN, col="#2b8cbe",  xlim=c(-0.12, 0.12), lwd=3, lty=2)
+abline(v=observedN, col="#dd1c77", xlim=c(-0.12, 0.12), lwd=3, lty=2)
+# compute p-value as proportion smaller or than observed
+sum(res > predictedN)/length(res) * 2 # *2 for two-taile
+
+### H2
+meandiffH <- function(webs){
+  obs <- sapply(webs, networklevel, index="H2")
+  mean(obs[8:14]) - mean(obs[1:7])
+}
+
+(observedH <- meandiffH(weblistO))
+(predictedH <- meandiffH(weblistP))
+
+
+
+resHO <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistO, nullmodel, N=1, method="shuffle.web")
+  resHO[i] <- meandiffH(nulllist)
+}
+
+resHP <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistP, nullmodel, N=1, method="shuffle.web")
+  resHP[i] <- meandiffH(nulllist)
+}
+
+
+hh2obs<-hist(resHO, border="white", col=observed, cex.axis = 2, cex.lab=3, ylab = " ",  
+             main = "H2 specialization", cex.lab=1.5, xlim = c(0.01, 0.07))
+
+hh2pred<-hist(resHP, border="white", col=predicted, cex.axis = 2, cex.lab=3, ylab = " ",  
+              main = "H2 specialization", cex.lab=1.5, xlim = c(0.01, 0.07))
+
+
+
+
+
+plot(hh2pred, col=predicted,cex.axis = 2, xlim=c(-0.01, 0.07)) # Plot 1st histogram using a transparent color
+plot(hh2obs, col=observed, xlim=c(-0.01, 0.07), add = TRUE) # Add 2nd histogram using different color
+
+abline(v=predictedH, col="#2b8cbe", lwd=3, lty=2)
+abline(v=observedH, col="#dd1c77", lwd=3, lty=2)
+
+
+
+### Robustness (method group=lower, method=random)
+###
+
+meandiffR <- function(webs){
+  obs <- sapply(webs, networklevel, index="robustness", extinctmethod = "random", level="lower")
+  mean(obs[8:14]) - mean(obs[1:7])
+}
+
+(observedR <- meandiffR(weblistP))
+(predictedR <- meandiffR(weblistO))
+
+
+resRO <- 1:1000
+for (i in 1:1000){ # takes a few minutes !!
+  nulllist <- sapply(weblistO, nullmodel, N=1, method="shuffle.web")
+  resRO[i] <- meandiffR(nulllist)
+}
+
+resRP <- 1:1000
+for (i in 1:1000){ 
+  nulllist <- sapply(weblistP, nullmodel, N=1, method="shuffle.web")
+  resRP[i] <- meandiffR(nulllist)
+}
+
+
+hrobs<-hist(resRO, border="white", col=observed, cex.axis = 2, cex.lab=3, ylab = " ",  
+            main = "Robustness", cex.lab=1.5, xlim = c(-0.04, 0.07))
+
+hrpred<-hist(resRP, border="white", col=predicted, cex.axis = 2, cex.lab=3, ylab = " ",  
+             main = "H2 specialization", cex.lab=1.5, xlim = c(0.01, 0.07))
+
+
+
+plot(hrobs, col=observed, xlim=c(0.03, 0.06), ylim = c(0,300), add = TRUE) # Add 2nd histogram using different color
+
+plot(hrpred, col=predicted,cex.axis = 2, xlim=c(0.03, 0.06), ylim = c(0,300)) # Plot 1st histogram using a transparent color
+
+
+abline(v=predictedR, col="#2b8cbe", lwd=3, lty=2)
+abline(v=observedR, col="#dd1c77", lwd=3, lty=2)
+
+
+
